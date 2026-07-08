@@ -1,0 +1,1 @@
+Place your sample.mp4 video file in this folder (static/sample.mp4)

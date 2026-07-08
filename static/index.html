@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CN2026 Messenger</title>
+<style>
+  :root{
+    --bg:#0f1117;--sidebar:#161b27;--panel:#1a2035;--border:#2a3550;
+    --accent:#4f8ef7;--accent2:#7c5cfc;--online:#22c55e;--offline:#6b7280;
+    --text:#e2e8f0;--subtext:#8896b3;--msg-out:#2563eb;--msg-in:#1e293b;
+    --danger:#ef4444;--radius:12px;--font:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh;display:flex;overflow:hidden}
+
+  /* ── Auth overlay ── */
+  #auth-overlay{position:fixed;inset:0;background:var(--bg);display:flex;
+    align-items:center;justify-content:center;z-index:100}
+  .auth-card{background:var(--panel);border:1px solid var(--border);border-radius:20px;
+    padding:40px;width:380px;box-shadow:0 20px 60px #00000060}
+  .auth-card h1{text-align:center;margin-bottom:8px;font-size:1.6rem;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .auth-card p{text-align:center;color:var(--subtext);margin-bottom:28px;font-size:.9rem}
+  .auth-tabs{display:flex;gap:8px;margin-bottom:24px}
+  .auth-tab{flex:1;padding:10px;border:1px solid var(--border);background:none;
+    color:var(--subtext);border-radius:8px;cursor:pointer;font-size:.9rem;transition:.2s}
+  .auth-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .field{margin-bottom:16px}
+  .field label{display:block;margin-bottom:6px;font-size:.85rem;color:var(--subtext)}
+  .field input{width:100%;padding:12px 14px;background:#0d1220;border:1px solid var(--border);
+    border-radius:8px;color:var(--text);font-size:.95rem;outline:none;transition:.2s}
+  .field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px #4f8ef720}
+  .btn-primary{width:100%;padding:13px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+    border:none;border-radius:8px;color:#fff;font-size:1rem;font-weight:600;cursor:pointer;
+    transition:.2s;margin-top:4px}
+  .btn-primary:hover{opacity:.9;transform:translateY(-1px)}
+  .auth-msg{margin-top:12px;text-align:center;font-size:.85rem;min-height:20px}
+  .auth-msg.error{color:var(--danger)} .auth-msg.ok{color:var(--online)}
+
+  /* ── App layout ── */
+  #app{display:none;width:100%;height:100vh;flex-direction:column}
+  #app.visible{display:flex}
+
+  /* Top bar */
+  .topbar{display:flex;align-items:center;justify-content:space-between;
+    padding:0 20px;height:58px;background:var(--sidebar);border-bottom:1px solid var(--border);
+    flex-shrink:0}
+  .topbar-logo{font-size:1.1rem;font-weight:700;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .topbar-right{display:flex;align-items:center;gap:12px}
+  .weather-widget{display:flex;align-items:center;gap:6px;padding:6px 14px;
+    background:var(--panel);border:1px solid var(--border);border-radius:20px;font-size:.85rem}
+  .weather-city{color:var(--subtext);font-size:.75rem}
+  .btn-sm{padding:7px 16px;border:1px solid var(--border);background:none;
+    color:var(--subtext);border-radius:8px;cursor:pointer;font-size:.85rem;transition:.2s}
+  .btn-sm:hover{background:var(--danger);border-color:var(--danger);color:#fff}
+
+  /* Main area */
+  .main{display:flex;flex:1;overflow:hidden}
+
+  /* Sidebar */
+  .sidebar{width:280px;background:var(--sidebar);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;flex-shrink:0}
+  .sidebar-head{padding:16px;border-bottom:1px solid var(--border)}
+  .sidebar-head h3{font-size:.85rem;color:var(--subtext);text-transform:uppercase;
+    letter-spacing:.05em;margin-bottom:10px}
+  .search-bar{position:relative}
+  .search-bar input{width:100%;padding:9px 12px 9px 34px;background:var(--panel);
+    border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.875rem;outline:none}
+  .search-bar::before{content:'🔍';position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:.8rem}
+  .user-list{flex:1;overflow-y:auto;padding:8px}
+  .user-list::-webkit-scrollbar{width:4px}
+  .user-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .user-item{display:flex;align-items:center;gap:10px;padding:10px 12px;
+    border-radius:10px;cursor:pointer;transition:.15s;margin-bottom:2px}
+  .user-item:hover{background:var(--panel)}
+  .user-item.active{background:var(--accent)20;border:1px solid var(--accent)40}
+  .avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-weight:700;font-size:.95rem;flex-shrink:0;position:relative}
+  .avatar-bot{background:linear-gradient(135deg,#7c3aed,#a855f7)}
+  .status-dot{width:10px;height:10px;border-radius:50%;border:2px solid var(--sidebar);
+    position:absolute;bottom:0;right:0}
+  .dot-online{background:var(--online)} .dot-offline{background:var(--offline)}
+  .user-info{flex:1;min-width:0}
+  .user-name{font-size:.9rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .user-status{font-size:.75rem;color:var(--subtext)}
+  .sidebar-footer{padding:12px;border-top:1px solid var(--border)}
+  .btn-video{width:100%;padding:10px;background:linear-gradient(135deg,#dc2626,#ef4444);
+    border:none;border-radius:8px;color:#fff;font-size:.875rem;font-weight:600;
+    cursor:pointer;transition:.2s;display:flex;align-items:center;justify-content:center;gap:8px}
+  .btn-video:hover{opacity:.85}
+
+  /* Chat panel */
+  .chat-panel{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  .chat-empty{flex:1;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;color:var(--subtext);gap:12px}
+  .chat-empty .icon{font-size:3rem}
+
+  /* Chat header */
+  .chat-header{padding:14px 20px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:12px;flex-shrink:0;background:var(--panel)}
+  .chat-header .avatar{width:36px;height:36px;font-size:.85rem}
+  .chat-header-info h3{font-size:1rem;font-weight:600}
+  .chat-header-info p{font-size:.8rem;color:var(--subtext)}
+
+  /* Messages */
+  .messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:8px}
+  .messages::-webkit-scrollbar{width:4px}
+  .messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .bubble-wrap{display:flex;flex-direction:column;max-width:65%}
+  .bubble-wrap.out{align-self:flex-end;align-items:flex-end}
+  .bubble-wrap.in{align-self:flex-start;align-items:flex-start}
+  .bubble{padding:10px 14px;border-radius:14px;font-size:.9rem;line-height:1.5;word-break:break-word}
+  .bubble-wrap.out .bubble{background:var(--msg-out);border-bottom-right-radius:4px}
+  .bubble-wrap.in .bubble{background:var(--msg-in);border-bottom-left-radius:4px}
+  .bubble-time{font-size:.7rem;color:var(--subtext);margin-top:3px;padding:0 2px}
+  .file-bubble{display:flex;align-items:center;gap:10px;padding:10px 14px;
+    background:var(--panel);border:1px solid var(--border);border-radius:12px;cursor:pointer;
+    text-decoration:none;color:var(--text);transition:.15s}
+  .file-bubble:hover{border-color:var(--accent);background:var(--accent)10}
+  .file-icon{font-size:1.5rem}
+  .file-name{font-size:.85rem;font-weight:500}
+  .file-dl{font-size:.75rem;color:var(--accent)}
+
+  /* Input bar */
+  .input-bar{padding:14px 20px;border-top:1px solid var(--border);
+    display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--panel)}
+  .input-bar textarea{flex:1;padding:12px 16px;background:var(--bg);
+    border:1px solid var(--border);border-radius:12px;color:var(--text);
+    font-size:.9rem;resize:none;outline:none;font-family:inherit;
+    max-height:120px;line-height:1.4;transition:.2s}
+  .input-bar textarea:focus{border-color:var(--accent)}
+  .btn-icon{width:40px;height:40px;border-radius:10px;border:1px solid var(--border);
+    background:none;color:var(--subtext);cursor:pointer;font-size:1.2rem;
+    display:flex;align-items:center;justify-content:center;transition:.15s;flex-shrink:0}
+  .btn-icon:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn-send{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn-send:hover{background:#3b76e8}
+
+  /* Video modal */
+  .modal-overlay{display:none;position:fixed;inset:0;background:#00000090;
+    z-index:200;align-items:center;justify-content:center}
+  .modal-overlay.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:16px;
+    width:min(900px,95vw);padding:24px}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+  .modal-header h2{font-size:1.2rem}
+  .modal-close{background:none;border:none;color:var(--subtext);font-size:1.5rem;cursor:pointer;
+    padding:4px 8px;border-radius:6px;transition:.15s}
+  .modal-close:hover{background:var(--danger);color:#fff}
+  video{width:100%;border-radius:10px;background:#000}
+  .modal-note{margin-top:10px;font-size:.8rem;color:var(--subtext);text-align:center}
+
+  /* Typing indicator */
+  .typing{display:none;font-size:.8rem;color:var(--subtext);padding:0 20px 6px;height:20px}
+
+  /* Toast */
+  .toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;
+    background:var(--online);color:#fff;border-radius:10px;font-size:.875rem;
+    font-weight:500;z-index:999;opacity:0;transition:.3s;pointer-events:none}
+  .toast.show{opacity:1}
+  .toast.error{background:var(--danger)}
+</style>
+</head>
+<body>
+
+<!-- AUTH OVERLAY -->
+<div id="auth-overlay">
+  <div class="auth-card">
+    <h1>💬 CN Messenger</h1>
+    <p>Computer Networks HW5</p>
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchTab('login')">Login</button>
+      <button class="auth-tab" onclick="switchTab('signup')">Sign Up</button>
+    </div>
+    <div class="field"><label>Username</label>
+      <input type="text" id="auth-user" placeholder="Enter username" onkeydown="if(event.key==='Enter')submitAuth()"/></div>
+    <div class="field"><label>Password</label>
+      <input type="password" id="auth-pass" placeholder="Enter password" onkeydown="if(event.key==='Enter')submitAuth()"/></div>
+    <button class="btn-primary" onclick="submitAuth()" id="auth-btn">Login</button>
+    <div class="auth-msg" id="auth-msg"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <!-- Top bar -->
+  <div class="topbar">
+    <span class="topbar-logo">💬 CN Messenger</span>
+    <div class="topbar-right">
+      <div class="weather-widget" id="weather-widget">
+        <span id="wx-icon">⏳</span>
+        <span id="wx-temp">--°C</span>
+        <span class="weather-city" id="wx-city">Loading…</span>
+      </div>
+      <span id="topbar-user" style="font-size:.85rem;color:var(--subtext)"></span>
+      <button class="btn-sm" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-head">
+        <h3>Contacts</h3>
+        <div class="search-bar">
+          <input type="text" id="search-input" placeholder="Search users…" oninput="filterUsers()"/>
+        </div>
+      </div>
+      <div class="user-list" id="user-list"></div>
+      <div class="sidebar-footer">
+        <button class="btn-video" onclick="openVideo()">▶️ Video Streaming Room</button>
+      </div>
+    </div>
+
+    <!-- Chat panel -->
+    <div class="chat-panel">
+      <div class="chat-empty" id="chat-empty">
+        <div class="icon">💬</div>
+        <div>Select a contact to start chatting</div>
+      </div>
+
+      <div id="chat-area" style="display:none;flex:1;flex-direction:column;overflow:hidden;display:none">
+        <div class="chat-header" id="chat-header"></div>
+        <div class="messages" id="messages"></div>
+        <div class="typing" id="typing-indicator">typing…</div>
+        <div class="input-bar">
+          <button class="btn-icon" onclick="triggerFileUpload()" title="Attach file">📎</button>
+          <textarea id="msg-input" rows="1" placeholder="Type a message…"
+            oninput="autoResize(this)" onkeydown="handleEnter(event)"></textarea>
+          <button class="btn-icon btn-send" onclick="sendMessage()" title="Send">➤</button>
+        </div>
+        <input type="file" id="file-input" style="display:none" onchange="uploadFile()"/>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Video modal -->
+<div class="modal-overlay" id="video-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>🎬 Video Streaming Room</h2>
+      <button class="modal-close" onclick="closeVideo()">✕</button>
+    </div>
+    <video id="video-player" controls>
+      <source src="/api/video" type="video/mp4"/>
+      Your browser does not support HTML5 video.
+    </video>
+    <p class="modal-note">Server-provided video stream. Place <code>sample.mp4</code> in <code>static/</code> folder.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let ME = null, PEER = null, WS = null;
+let authMode = 'login';
+const avatarColors = {};
+
+// ── Utils ─────────────────────────────────────────────────────────────────
+function getColor(name){
+  if(!avatarColors[name]){
+    const colors=['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899'];
+    avatarColors[name]=colors[name.split('').reduce((a,c)=>a+c.charCodeAt(0),0)%colors.length];
+  }
+  return avatarColors[name];
+}
+function initials(n){return n.slice(0,2).toUpperCase()}
+function fmtTime(ts){
+  const d=new Date(ts+'Z');
+  return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+}
+function toast(msg,type='ok'){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show'+(type==='error'?' error':'');
+  setTimeout(()=>t.className='toast',2800);
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+function switchTab(mode){
+  authMode=mode;
+  document.querySelectorAll('.auth-tab').forEach((b,i)=>{
+    b.classList.toggle('active',(mode==='login'&&i===0)||(mode==='signup'&&i===1));
+  });
+  document.getElementById('auth-btn').textContent=mode==='login'?'Login':'Create Account';
+  document.getElementById('auth-msg').textContent='';
+}
+async function submitAuth(){
+  const user=document.getElementById('auth-user').value.trim();
+  const pass=document.getElementById('auth-pass').value;
+  const msg=document.getElementById('auth-msg');
+  if(!user||!pass){msg.textContent='Please fill in all fields';msg.className='auth-msg error';return}
+  const fd=new FormData();fd.append('username',user);fd.append('password',pass);
+  const url=authMode==='login'?'/api/login':'/api/signup';
+  const r=await fetch(url,{method:'POST',body:fd});
+  const data=await r.json();
+  if(!r.ok){msg.textContent=data.detail||'Error';msg.className='auth-msg error';return}
+  if(authMode==='signup'){
+    msg.textContent='Account created! Please login.';msg.className='auth-msg ok';
+    switchTab('login');return;
+  }
+  ME=user;
+  document.getElementById('auth-overlay').style.display='none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('topbar-user').textContent=ME;
+  initApp();
+}
+
+async function logout(){
+  await fetch('/api/logout',{method:'POST'});
+  if(WS)WS.close();
+  location.reload();
+}
+
+// ── App init ──────────────────────────────────────────────────────────────
+function initApp(){
+  connectWS();
+  loadWeather();
+  setInterval(loadWeather,600000); // refresh every 10 min
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────
+function connectWS(){
+  const proto=location.protocol==='https:'?'wss':'ws';
+  WS=new WebSocket(`${proto}://${location.host}/ws/${ME}`);
+  WS.onmessage=e=>{
+    const d=JSON.parse(e.data);
+    if(d.type==='user_list') renderUserList(d.users);
+    if(d.type==='message')   handleIncoming(d);
+  };
+  WS.onclose=()=>setTimeout(connectWS,2000);
+}
+
+// ── User list ─────────────────────────────────────────────────────────────
+let allUsers=[];
+function renderUserList(users){
+  allUsers=users.filter(u=>u.username!==ME);
+  filterUsers();
+}
+function filterUsers(){
+  const q=document.getElementById('search-input').value.toLowerCase();
+  const visible=allUsers.filter(u=>u.username.toLowerCase().includes(q));
+  const ul=document.getElementById('user-list');
+  ul.innerHTML='';
+  visible.forEach(u=>{
+    const isBot=u.username==='Ollama';
+    const online=isBot||u.is_online;
+    const div=document.createElement('div');
+    div.className='user-item'+(PEER===u.username?' active':'');
+    div.onclick=()=>openChat(u.username);
+    const bg=isBot?'linear-gradient(135deg,#7c3aed,#a855f7)':`${getColor(u.username)}`;
+    div.innerHTML=`
+      <div class="avatar" style="background:${isBot?'linear-gradient(135deg,#7c3aed,#a855f7)':getColor(u.username)};color:#fff">
+        ${isBot?'🤖':initials(u.username)}
+        <span class="status-dot ${online?'dot-online':'dot-offline'}"></span>
+      </div>
+      <div class="user-info">
+        <div class="user-name">${u.username}</div>
+        <div class="user-status">${isBot?'AI Assistant':online?'● Online':'○ Offline'}</div>
+      </div>`;
+    ul.appendChild(div);
+  });
+}
+
+// ── Chat ──────────────────────────────────────────────────────────────────
+async function openChat(peer){
+  PEER=peer;
+  document.getElementById('chat-empty').style.display='none';
+  const ca=document.getElementById('chat-area');
+  ca.style.display='flex'; ca.style.flexDirection='column'; ca.style.flex='1'; ca.style.overflow='hidden';
+
+  const isBot=peer==='Ollama';
+  const hdrAvatar=isBot
+    ?`<div class="avatar avatar-bot" style="font-size:1.1rem">🤖</div>`
+    :`<div class="avatar" style="background:${getColor(peer)};color:#fff">${initials(peer)}</div>`;
+  document.getElementById('chat-header').innerHTML=`
+    ${hdrAvatar}
+    <div class="chat-header-info">
+      <h3>${peer}</h3>
+      <p>${isBot?'Ollama AI Assistant':'Click to view profile'}</p>
+    </div>`;
+
+  document.getElementById('messages').innerHTML='<div style="text-align:center;color:var(--subtext);font-size:.8rem;padding:10px">Loading…</div>';
+  const msgs=await fetch(`/api/messages/${peer}`).then(r=>r.json());
+  renderMessages(msgs);
+  document.querySelectorAll('.user-item').forEach(el=>{
+    el.classList.toggle('active',el.querySelector('.user-name')?.textContent===peer);
+  });
+}
+
+function renderMessages(msgs){
+  const box=document.getElementById('messages');
+  box.innerHTML='';
+  if(!msgs.length){
+    box.innerHTML='<div style="text-align:center;color:var(--subtext);font-size:.85rem;padding:20px">No messages yet. Say hello! 👋</div>';
+    return;
+  }
+  msgs.forEach(m=>appendMessage(m));
+  scrollBottom();
+}
+
+function appendMessage(m){
+  const box=document.getElementById('messages');
+  const out=m.sender===ME;
+  const wrap=document.createElement('div');
+  wrap.className=`bubble-wrap ${out?'out':'in'}`;
+
+  if(m.msg_type==='file'){
+    const parts=m.content.replace('[FILE]','').split('|');
+    const stored=parts[0], orig=parts[1]||stored;
+    wrap.innerHTML=`
+      <a class="file-bubble" href="/uploads/${stored}" target="_blank" download="${orig}">
+        <span class="file-icon">📎</span>
+        <div><div class="file-name">${orig}</div><div class="file-dl">Click to download</div></div>
+      </a>
+      <span class="bubble-time">${fmtTime(m.timestamp)}</span>`;
+  } else {
+    wrap.innerHTML=`
+      <div class="bubble">${escHtml(m.content)}</div>
+      <span class="bubble-time">${fmtTime(m.timestamp)}</span>`;
+  }
+  box.appendChild(wrap);
+}
+
+function handleIncoming(m){
+  if((m.sender===ME&&m.receiver===PEER)||(m.sender===PEER&&m.receiver===ME)||
+     (m.sender==='Ollama'&&PEER==='Ollama')){
+    appendMessage(m);
+    scrollBottom();
+  }
+}
+
+function scrollBottom(){
+  const box=document.getElementById('messages');
+  box.scrollTop=box.scrollHeight;
+}
+
+function escHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+          .replace(/\n/g,'<br>');
+}
+
+function sendMessage(){
+  const input=document.getElementById('msg-input');
+  const text=input.value.trim();
+  if(!text||!PEER||!WS||WS.readyState!==1)return;
+  WS.send(JSON.stringify({type:'message',receiver:PEER,content:text}));
+  input.value=''; input.style.height='auto';
+}
+
+function handleEnter(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
+}
+function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';}
+
+// ── File upload ───────────────────────────────────────────────────────────
+function triggerFileUpload(){if(PEER)document.getElementById('file-input').click();}
+async function uploadFile(){
+  const fi=document.getElementById('file-input');
+  if(!fi.files.length||!PEER)return;
+  const fd=new FormData();fd.append('file',fi.files[0]);fd.append('receiver',PEER);
+  const r=await fetch('/api/upload',{method:'POST',body:fd});
+  if(r.ok){toast('File sent!')}else{toast('Upload failed','error');}
+  fi.value='';
+}
+
+// ── Weather ───────────────────────────────────────────────────────────────
+async function loadWeather(){
+  const city=localStorage.getItem('wx-city')||'Seoul';
+  try{
+    const d=await fetch(`/api/weather?city=${encodeURIComponent(city)}`).then(r=>r.json());
+    document.getElementById('wx-icon').textContent=d.icon;
+    document.getElementById('wx-temp').textContent=`${d.temp}${d.unit}`;
+    document.getElementById('wx-city').textContent=`${d.city} · ${d.description}`;
+  }catch(e){
+    document.getElementById('wx-city').textContent='Weather unavailable';
+  }
+}
+
+// ── Video ─────────────────────────────────────────────────────────────────
+function openVideo(){
+  document.getElementById('video-modal').classList.add('open');
+  document.getElementById('video-player').play().catch(()=>{});
+}
+function closeVideo(){
+  document.getElementById('video-modal').classList.remove('open');
+  const v=document.getElementById('video-player');
+  v.pause(); v.currentTime=0;
+}
+
+// ── Check existing session ────────────────────────────────────────────────
+(async()=>{
+  const r=await fetch('/api/me');
+  if(r.ok){
+    const d=await r.json();
+    ME=d.username;
+    document.getElementById('auth-overlay').style.display='none';
+    document.getElementById('app').classList.add('visible');
+    document.getElementById('topbar-user').textContent=ME;
+    initApp();
+  }
+})();
+</script>
+</body>
+</html>
